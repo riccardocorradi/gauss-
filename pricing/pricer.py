@@ -143,19 +143,31 @@ class PricerClass:
                                                    r = factors[0], m = factors[1], l = factors[2]))
         return np.array(term_structure)
     
-    def amountOfRisk(self, tau, deltaTau, n_steps = 1000):
-
-        omega = self.omegaMatrix()
+    def amountOfRisk_drift(self, tau, deltaTau, n_steps = 1000):
         grid = np.linspace(0.0, deltaTau, n_steps)
         vals = np.zeros_like(grid)
         for k, s in enumerate(grid):
             z = tau + deltaTau - s
             gamma = self.factorLoadings(z)
             gamma3 = gamma[2]
-            vals[k] = (z * gamma3 * self.sigma_l - 0.5* z**2 * (gamma @ omega @ omega.T @ gamma.T))
-
+            vals[k] = z * gamma3 * self.sigma_l
         rp = np.trapz(vals, grid)
         return rp
+
+    def amountOfRisk_convexity(self, tau, deltaTau, n_steps = 1000):
+        omega = self.omegaMatrix()
+        grid = np.linspace(0.0, deltaTau, n_steps)
+        vals = np.zeros_like(grid)
+        for k, s in enumerate(grid):
+            z = tau + deltaTau - s
+            gamma = self.factorLoadings(z)
+            vals[k] = - 0.5* z**2 * (gamma @ omega @ omega.T @ gamma.T)
+        rp = np.trapz(vals, grid)
+        return rp
+    
+    def amountOfRisk(self, tau, deltaTau, n_steps = 1000):
+        return self.amountOfRisk_drift(tau = tau, deltaTau= deltaTau, n_steps=n_steps) + self.amountOfRisk_convexity(tau = tau, deltaTau=deltaTau, n_steps = n_steps)
+
     
     
     
