@@ -3,14 +3,21 @@ from pricing.pricer import PricerClass
 from scipy.optimize import minimize
 
 class Calibration():
-    def __init__(self, termStructurePath, maturities, fairly_priced, alpha_r = 1.0547, lossDecayFactor = 0.8):
+    def __init__(self, termStructurePath, forwardTermStructurePath, useInputForwards, maturities, fairly_priced, fairly_priced_fwd, fwd_deltaTau, alpha_r = 1.0547, lossDecayFactor = 0.8):
         self.termStructurePath = np.asarray(termStructurePath)
+        self.forwardTermStructurePath = np.asarray(forwardTermStructurePath)
+        self.useInputForwards = useInputForwards
         self.maturities = maturities
         self.fairly_priced = fairly_priced
+        self.fairly_priced_fwd = fairly_priced_fwd
+        if len(self.fairly_priced_fwd) != 2:
+            raise ValueError("fairly_priced_fwd must contain exactly two forward starts")
+        self.fwd_deltaTau = fwd_deltaTau
         self.alpha_r = alpha_r
         self.pricer = PricerClass(alpha_r = alpha_r, alpha_m = None, alpha_l = None, sigma_m = None, sigma_l = None, rho = None, mu = None)
         self.lossDecayFactor = lossDecayFactor
         self.lossDecayFunction = lambda x: lossDecayFactor**(x/252)
+        
     
     # General Utils
 
@@ -308,9 +315,14 @@ class Calibration():
         
         return latentFactors
     
-    def fittedYieldsFromMu(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu):
+    def fittedYieldsFromMu(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu, extraction):
         mu = float(mu)
-        lf = self.extractLatentFactors(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu)
+        if extraction == 'spot':
+            lf = self.extractLatentFactors(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu)
+        elif extraction == 'fwd':
+            lf = self.extractLatentFactors_fwd(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu, deltaTau= self.fwd_deltaTau)
+        else:
+            raise ValueError("extraction must be 'spot' or 'fwd'")
         pricer = self.pricer
         pricer.updParams(alpha_r = alpha_r, alpha_m = alpha_m, alpha_l = alpha_l, sigma_m = sigma_m, sigma_l = sigma_l, rho = rho, mu = mu)
         
@@ -321,25 +333,25 @@ class Calibration():
             fitted.append(curve)
         return np.array(fitted)
     
-    def objectiveFunction_mu(self, x, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, lossDecayFactor = None):
+    def objectiveFunction_mu(self, x, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, extraction, lossDecayFactor = None):
         if lossDecayFactor:
             lossDecayFunction = lambda x: lossDecayFactor**(x/252)
         else:
             lossDecayFunction = self.lossDecayFunction
 
         mu = float(x[0]) if np.ndim(x) > 0 else float(x)
-        fittedYields = self.fittedYieldsFromMu(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu)
+        fittedYields = self.fittedYieldsFromMu(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu, extraction)
         trueYields = self.termStructurePath[:, 1:]
         decayWeights = [lossDecayFunction(x) for x in range(fittedYields.shape[0] - 1, -1, -1)]
         return np.dot(decayWeights, np.sum((fittedYields - trueYields)**2, axis = 1))
     
-    def calibrateMu(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, initialGuess = 0.0, lossDecayFactor = None):
+    def calibrateMu(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, initialGuess = 0.0, extraction = 'spot', lossDecayFactor = None):
         if not lossDecayFactor:
             lossDecayFactor = self.lossDecayFactor
         result = minimize(
             self.objectiveFunction_mu,
             x0=initialGuess,
-            args=(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, lossDecayFactor),
+            args=(alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, extraction, lossDecayFactor),
             method='L-BFGS-B'
         )
 
@@ -358,17 +370,33 @@ class Calibration():
     
     # Functions to calibrate Mu and extract factors by matching the 2y-forward 1y and 10y-forward 1y to m_t and l_t
 
-    def marketForwardRateSeries(self, tau, deltaTau):
-        assert (tau + deltaTau) in self.maturities, f'tau + deltaTau = {tau+deltaTau} must be in the maturity set'
-        termStructurePath = self.termStructurePath[:, 1:]
-        frontYield = termStructurePath[:, np.where(self.maturities == tau)[0][0]]
-        backYield = termStructurePath[:, np.where(self.maturities == tau + deltaTau)[0][0]]
-        return backYield        
-
-    def extractLatentFactors_fwd(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu):
+    def extractLatentFactors_fwd(self, alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu, deltaTau = 1):
+        
         pricer = self.pricer
         pricer.updParams(alpha_r = alpha_r, alpha_m = alpha_m, alpha_l = alpha_l, sigma_m = sigma_m, sigma_l = sigma_l, rho = rho, mu = mu)
+        
+        if self.useInputForwards:
+            midForwardSeries = self.forwardTermStructurePath[:, np.where(self.maturities == self.fairly_priced_fwd[0])[0][0]]
+            longForwardSeries = self.forwardTermStructurePath[:, np.where(self.maturities == self.fairly_priced_fwd[1])[0][0]]
+        else:
+            midForwardSeries = self.observedForwardRateSeries(tau = self.fairly_priced_fwd[0], deltaTau= deltaTau)
+            longForwardSeries = self.observedForwardRateSeries(tau = self.fairly_priced_fwd[1], deltaTau= deltaTau)
+        
+        ts = self.termStructurePath
+        shortRate = ts[:, 0]
+        midForwardSeries_sub = midForwardSeries - pricer.factorLoadings_forwards(tau = self.fairly_priced_fwd[0], deltaTau= deltaTau)[0] * shortRate
+        longForwardSeries_sub = longForwardSeries - pricer.factorLoadings_forwards(tau = self.fairly_priced_fwd[1], deltaTau= deltaTau)[0] * shortRate
 
+        benchmarkForwards = np.column_stack((midForwardSeries_sub, longForwardSeries_sub))
+        benchFwdLoadings = np.row_stack((pricer.factorLoadings_forwards(tau = self.fairly_priced_fwd[0], deltaTau= deltaTau)[1:3],
+                                         pricer.factorLoadings_forwards(tau = self.fairly_priced_fwd[1], deltaTau= deltaTau)[1:3]))
+        benchFwdLoadings_inv = np.linalg.inv(benchFwdLoadings)
+        
+        constantVector = np.array([1 - np.sum(pricer.factorLoadings_forwards(tau = x, deltaTau = deltaTau)) for x in self.fairly_priced_fwd])
+        convexityTerms = np.array([pricer.convexityTerm_forwards(tau = x, deltaTau= deltaTau) for x in self.fairly_priced_fwd])
+
+        latentFactors = (benchmarkForwards - mu * constantVector + convexityTerms) @ benchFwdLoadings_inv.T
+        return latentFactors
 
     # Risk premia calculation thru forwards
 
