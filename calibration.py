@@ -454,6 +454,27 @@ class Calibration():
 
         return (forwardTauPrime - forwardTau) / denom
     
+    def lambdaFromForwards_corrected(self, tau, tauPrime, deltaTau, curve,
+                       alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu,
+                       n_steps=1000):
+        '''
+        corrects the mistake of taking out lambda as if it multiplied the convexity term in Eq A9.27 of the appendix
+        '''
+        pricer = self.pricer
+        pricer.updParams(alpha_r=alpha_r, alpha_m=alpha_m, alpha_l=alpha_l,
+                        sigma_m=sigma_m, sigma_l=sigma_l, rho=rho, mu=mu)
+        
+        forwardTau = self.observedForwardRate(tau=tau, deltaTau=deltaTau, curve = curve)
+        forwardTauPrime = self.observedForwardRate(tau=tauPrime, deltaTau=deltaTau, curve = curve)
+
+        rpTau_drift = pricer.amountOfRisk_drift(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rpTauPrime_drift = pricer.amountOfRisk_drift(tau=tauPrime, deltaTau=deltaTau, n_steps=n_steps)
+
+        rpTau_conv =  pricer.amountOfRisk_convexity(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rpTauPrime_conv = pricer.amountOfRisk_convexity(tau=tauPrime, deltaTau=deltaTau, n_steps=n_steps)
+
+        return ((forwardTauPrime - forwardTau)*deltaTau + (rpTauPrime_conv - rpTau_conv))/(rpTauPrime_drift - rpTau_drift)
+    
     def expectedShortRateSeries(self, tau, tauPrime, deltaTau,
                             alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu,
                             n_steps=1000):
