@@ -5,12 +5,23 @@ import matplotlib.ticker as mtick
 
 class tradeScreener:
 
-    def __init__(self, modelData, actualData, maturitySet):
+    def __init__(self, modelData, actualData, maturitySet,
+                 modelData_fwd, actualData_fwd, maturitySet_fwd):
         self.modelData = modelData
         self.modelData.index = pd.to_datetime(self.modelData.index)
         self.actualData = actualData
         self.actualData.index = pd.to_datetime(self.actualData.index)
         self.maturitySet = maturitySet
+        
+        self.modelData_fwd = modelData_fwd
+        for key, _ in self.modelData_fwd.items():
+            modelData_fwd[key].index = pd.to_datetime(modelData_fwd[key].index) 
+        
+        self.actualData_fwd = actualData_fwd
+        for key, _ in self.modelData_fwd.items():
+            self.actualData_fwd[key].index = pd.to_datetime(self.actualData_fwd[key].index)
+
+        self.maturitySet_fwd = maturitySet_fwd
 
     def buildSignal(self, errorData, shortW, longW):
         signals = errorData.rolling(shortW).mean() - errorData.rolling(longW).mean()
@@ -198,11 +209,19 @@ class tradeScreener:
                 color='red', alpha=0.1, interpolate=True
             )
             ax[i].grid(True)
-
         
-
-
-
+    def outrightScreener_fwd(self, shortW = 5, longW= 40):
+        
+        deltaTauList = [x for x in self.modelData_fwd.keys()]
+        outputdf = pd.DataFrame()
+        for deltaTau in deltaTauList:
+            summaryDf = self.screener(model = self.modelData_fwd[deltaTau], 
+                                        actual = self.actualData_fwd[deltaTau], 
+                                        shortW=shortW, longW=longW)
+            summaryDf.index = [f'{deltaTau}y{x}y' for x in summaryDf.index]
+            outputdf = pd.concat([outputdf, summaryDf])
+        #outputdf = outputdf.style.format("{:.6f}")
+        return outputdf.round(6)
 
 
     
