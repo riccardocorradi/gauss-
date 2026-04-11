@@ -129,6 +129,57 @@ class tradeScreener:
         trades_df['days'] = (trades_df['exit_date'] - trades_df['entry_date']).dt.days
         return trades_df
     
+    def allOutrightBacktest(self, startDt, endDt, shortW, longW, standardW = 14):
+        results_dict = {}
+        for maturity in self.maturitySet:
+            modelSeries = self.modelData[maturity][startDt:endDt]
+            actualSeries = self.actualData[maturity][startDt:endDt]
+            performanceDf = self.singleItemPerformance(modelSeries=modelSeries,
+                                                       actualSeries=actualSeries,
+                                                       startDt = startDt, endDt= endDt,
+                                                       shortW = shortW, longW = longW, standardW = standardW)
+            results_dict[maturity] = performanceDf
+
+        results_df = pd.DataFrame([(
+            (key, 
+             (df['pnl'] > 0).mean(), 
+             df.loc[df['pnl'] > 0]['pnl'].mean() / abs(df.loc[df['pnl'] < 0]['pnl'].mean()) if pd.notna(df.loc[df['pnl'] > 0]['pnl'].mean()) and df.loc[df['pnl'] < 0]['pnl'].mean() != 0 else pd.NA,
+             df['days'].mean(),
+             df['days'].median(),
+             results_dict[key].shape[0]
+             )) 
+             for key, df in results_dict.items()], 
+             columns = ['maturity', 'hitrate', 'skew', 'avg days', 'median days','n_trades'])
+        return results_df
+
+    def allSlopesBacktest(self, startDt, endDt, shortW, longW, standardW = 14):
+        slopeDict = self.buildSlopes()
+        modelSlopes = slopeDict['model']
+        actualSlopes = slopeDict['actual']
+        results_dict = {}
+        for targetSlope in modelSlopes.columns:
+            modelSeries = modelSlopes[targetSlope][startDt:endDt]
+            actualSeries = actualSlopes[targetSlope][startDt:endDt]
+            
+            performanceDf = self.singleItemPerformance(modelSeries=modelSeries,
+                                                       actualSeries=actualSeries,
+                                                       startDt = startDt, endDt= endDt,
+                                                       shortW = shortW, longW = longW, standardW = standardW)
+            results_dict[targetSlope] = performanceDf
+
+        results_df = pd.DataFrame([(
+            (key, 
+             (df['pnl'] > 0).mean(), 
+             df.loc[df['pnl'] > 0]['pnl'].mean() / abs(df.loc[df['pnl'] < 0]['pnl'].mean()) if pd.notna(df.loc[df['pnl'] > 0]['pnl'].mean()) and df.loc[df['pnl'] < 0]['pnl'].mean() != 0 else pd.NA,
+             df['days'].mean(),
+             df['days'].median(),
+             results_dict[key].shape[0]
+             )) 
+             for key, df in results_dict.items()], 
+             columns = ['slope', 'hitrate', 'skew', 'avg days', 'median days','n_trades'])
+
+        return results_df
+
     def allFliesBacktest(self, startDt, endDt, shortW, longW, standardW = 14):
         flies = [(i, j, k) for i, j, k in combinations(self.maturitySet, 3) if (j - i) == (k - j)]
         flyDict = self.buildFlies()
