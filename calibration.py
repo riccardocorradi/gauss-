@@ -846,14 +846,17 @@ class Calibration():
         forwardTau = self.observedForwardRateSeries(tau=tau, deltaTau=deltaTau)
         forwardTauPrime = self.observedForwardRateSeries(tau=tauPrime, deltaTau=deltaTau)
 
-        rpTau = pricer.amountOfRisk(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
-        rpTauPrime = pricer.amountOfRisk(tau=tauPrime, deltaTau=deltaTau, n_steps=n_steps)
+        rpTau_drift = pricer.amountOfRisk_drift(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rpTauPrime_drift = pricer.amountOfRisk_drift(tau=tauPrime, deltaTau=deltaTau, n_steps=n_steps)
 
-        denom = rpTauPrime / deltaTau - rpTau / deltaTau
+        rpTau_conv = pricer.amountOfRisk_convexity(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rpTauPrime_conv = pricer.amountOfRisk_convexity(tau=tauPrime, deltaTau=deltaTau, n_steps=n_steps)
+
+        denom = rpTauPrime_drift - rpTau_drift
         if np.isclose(denom, 0.0):
-            raise ValueError("Denominator too close to zero in lambdaFromForwards().")
+            raise ValueError("Denominator too close to zero in lambdaSeriesFromForwards().")
 
-        return (forwardTauPrime - forwardTau) / denom
+        return ((forwardTauPrime - forwardTau) * deltaTau + (rpTauPrime_conv - rpTau_conv)) / denom
     
     def lambdaFromForwards_corrected(self, tau, tauPrime, deltaTau, curve,
                        alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu,
@@ -890,12 +893,13 @@ class Calibration():
                         sigma_m=sigma_m, sigma_l=sigma_l, rho=rho, mu=mu)
 
         f_tau = self.observedForwardRateSeries(tau=tau, deltaTau=deltaTau)
-        rp_tau = pricer.amountOfRisk(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rp_tau_drift = pricer.amountOfRisk_drift(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
+        rp_tau_conv = pricer.amountOfRisk_convexity(tau=tau, deltaTau=deltaTau, n_steps=n_steps)
         lambdaSeries = self.lambdaSeriesFromForwards(tau = tau, tauPrime= tauPrime, deltaTau= deltaTau, 
                                                      alpha_r=alpha_r, alpha_m=alpha_m, alpha_l=alpha_l,
                                                      sigma_m=sigma_m, sigma_l=sigma_l, rho=rho, mu=mu)
 
-        return f_tau - lambdaSeries * (rp_tau / deltaTau)
+        return f_tau - (lambdaSeries * rp_tau_drift + rp_tau_conv) / deltaTau
     
     def lambdaRegression_twoPremia(self, tau_0, tauList, deltaTau, curve,
                                    alpha_r, alpha_m, alpha_l, sigma_m, sigma_l, rho, mu, n_steps=1000):
