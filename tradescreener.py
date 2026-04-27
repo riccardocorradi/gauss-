@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
 import QuantLib as ql
+from mpl_bsic import apply_bsic_style
 
 from swapengine import swapEngine
 
@@ -345,6 +346,8 @@ class tradeScreener:
                 ax[i].axvspan(trade['entry_plot'], trade['exit_plot'], color=color, alpha=0.1)
         
             ax[i].grid(True)
+
+        apply_bsic_style(fig, ax)
         
     def outrightScreener_fwd(self, shortW = 5, longW= 40, numberSigma = 2):
         
@@ -376,8 +379,8 @@ class tradeScreener:
 
         return results_dict
 
-    def allTradesSlopes(self, startDt, endDt, shortW, longW, standardW = 14, numberSigma = 2, stopLossSigma = 2.5, stopLossAboveEntry = True):
-        slopeDict = self.buildSlopes()
+    def allTradesSlopes(self, startDt, endDt, shortW, longW, standardW = 14, numberSigma = 2, stopLossSigma = 2.5, stopLossAboveEntry = True, minSpacing = 1):
+        slopeDict = self.buildSlopes(minSpacing=minSpacing)
         modelSlopes = slopeDict['model']
         actualSlopes = slopeDict['actual']
         results_dict = {}
@@ -396,9 +399,10 @@ class tradeScreener:
 
         return results_dict
     
-    def allTradesFlies(self, startDt, endDt, shortW, longW, standardW = 14, numberSigma = 2, stopLossSigma = 2.5, stopLossAboveEntry = True):
-        flies = [(i, j, k) for i, j, k in combinations(self.maturitySet, 3) if (j - i) == (k - j)]
-        flyDict = self.buildFlies()
+    def allTradesFlies(self, startDt, endDt, shortW, longW, standardW = 14, numberSigma = 2, stopLossSigma = 2.5, stopLossAboveEntry = True, minSpacing = 1):
+        flies = [(i, j, k) for i, j, k in combinations(self.maturitySet, 3) if (j - i) == (k - j) and abs(j - i) >= minSpacing and abs(k - j) >= minSpacing]
+        
+        flyDict = self.buildFlies(minSpacing=minSpacing)
         modelFlies = flyDict['model']
         actualFlies = flyDict['actual']
         results_dict = {}
