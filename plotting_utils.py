@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import matplotlib.ticker as mtick
+import mpl_bsic as bsic
 
 def residuals_actualFitted(fittingErrors, fittedTs, termStructurePath, tenor, sampleDates,
                            figsize = (20,5)):
@@ -29,15 +30,25 @@ def multipleResiduals(fittingErrors, tenors, sampleDates, figsize = (20,5)):
     ax.set_ylabel('bps')
     ax.axvline(x = pd.Timestamp(sampleDates[1]), color = 'grey', linestyle = '--')
 
-def threeFactorPlot(estFactorsDf_full, figsize = (20,3)):
+def threeFactorPlot(estFactorsDf_full, figsize = (20,3), title = None, export = False, exportName = None):
     fig, ax = plt.subplots(figsize = figsize)
     plt.subplots_adjust(bottom=0.25)
-    ax.plot(estFactorsDf_full['short'], color = 'blue')
+    ax.plot(estFactorsDf_full['short'], color = 'blue', label = 'short rate')
     ax.plot(estFactorsDf_full['medium'], color = 'red', label = 'medium')
     ax.plot(estFactorsDf_full['long'], color = 'orange', label = 'long')
-    ax.axhline(y = 0, color = 'grey', linestyle = '--')
+    ax.axhline(y = 0, color = 'grey', linestyle = '--', alpha = 0.5)
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda y, _: f'{y:.2f}%'))
     ax.legend()
-    ax.set_title('Evolution of latent factors')
+    if title:
+        ax.set_title(title)
+    else:
+        ax.set_title('Evolution of latent factors')
+    plt.tight_layout()
+    bsic.apply_bsic_style(fig, ax)
+    
+    if export:
+        plt.savefig(f'{exportName}.png', dpi = 300)
+        bsic.export_figure(fig = fig, filename = exportName)
 
 def twoFactorPlot(estFactorsDf_full, limits, figsize = (20,3)):
     
