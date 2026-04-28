@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
 import QuantLib as ql
-from mpl_bsic import apply_bsic_style
+from mpl_bsic import apply_bsic_style, export_figure
 
 from swapengine import swapEngine
 
@@ -296,7 +296,8 @@ class tradeScreener:
     def plotModelVsActual(self, modelSeries, actualSeries, 
                           startDt, endDt, backtestDf, leftPlotBp = False,
                           display_startDt = None, display_endDt = None,
-                          shortW = 5, longW = 40, standardW = 14):
+                          shortW = 5, longW = 40, standardW = 14,
+                          export = False, exportName = None):
         
         actualSeries = actualSeries[startDt:endDt]
         modelSeries = modelSeries[startDt:endDt]
@@ -314,8 +315,10 @@ class tradeScreener:
             longW_MA = longW_MA[display_startDt:display_endDt]
         
         fig, ax = plt.subplots(nrows= 1, ncols = 2, figsize = (20, 4))
+        
         ax[0].plot(modelSeries, color = 'blue', linestyle = '--', label = 'model')
         ax[0].plot(actualSeries, color = 'red', linestyle = '-', label = 'actual')
+        apply_bsic_style(fig, ax)
         ax[0].legend()
         ax[0].set_title('Level of actual versus model')
         if leftPlotBp:
@@ -347,7 +350,9 @@ class tradeScreener:
         
             ax[i].grid(True)
 
-        apply_bsic_style(fig, ax)
+        if export:
+            plt.savefig(exportName, bbox_inches='tight')
+            export_figure(fig = fig, filename = exportName)
         
     def outrightScreener_fwd(self, shortW = 5, longW= 40, numberSigma = 2):
         
